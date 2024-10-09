@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Infrastructure Deployment Documentation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            max-width: 1000px;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            color: #2c3e50;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            overflow-x: auto;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        table, th, td {
+            border: 1px solid #bdc3c7;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        .toc a {
+            text-decoration: none;
+            color: #2980b9;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>AWS Infrastructure Deployment Documentation</h1>
+    <a href="index.HTML">Home</a>
+
+    <h2>Table of Contents</h2>
+    <ol>
+        <li><a href="#introduction">Introduction</a></li>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#architecture-overview">Architecture Overview</a></li>
+        <li><a href="#terraform-configuration">Terraform Configuration</a>
+            <ul>
+                <li><a href="#vpc-configuration">VPC Configuration</a></li>
+                <li><a href="#subnet-configuration">Subnet Configuration</a></li>
+                <li><a href="#internet-gateway-and-nat-gateway">Internet Gateway and NAT Gateway</a></li>
+                <li><a href="#route-tables">Route Tables</a></li>
+                <li><a href="#security-groups">Security Groups</a></li>
+                <li><a href="#ec2-instances">EC2 Instances</a></li>
+                <li><a href="#load-balancer">Load Balancer</a></li>
+                <li><a href="#auto-scaling-group">Auto Scaling Group</a></li>
+            </ul>
+        </li>
+        <li><a href="#deployment-steps">Deployment Steps</a></li>
+        <li><a href="#cleanup">Cleanup</a></li>
+        <li><a href="#best-practices">Best Practices</a></li>
+        <li><a href="#conclusion">Conclusion</a></li>
+    </ol>
+
+    <hr>
+
+    <h2 id="introduction">Introduction</h2>
+    <p>
+        This documentation provides a comprehensive guide to deploying a scalable and secure AWS infrastructure using Terraform. The infrastructure includes a Virtual Private Cloud (VPC), public and private subnets, Internet and NAT gateways, route tables, security groups, EC2 instances, an Application Load Balancer (ALB), and an Auto Scaling Group (ASG). This setup ensures high availability, security, and scalability for your applications.
+    </p>
+
+    <h2 id="prerequisites">Prerequisites</h2>
+    <p>Before deploying the infrastructure, ensure you have the following:</p>
+    <ul>
+        <li><strong>AWS Account</strong>: Access to an AWS account with necessary permissions.</li>
+        <li><strong>Terraform Installed</strong>: Terraform version 0.12 or higher installed on your local machine.</li>
+        <li><strong>AWS CLI Configured</strong>: AWS CLI configured with your credentials.</li>
+        <li><strong>SSH Key Pair</strong>: An existing SSH key pair (<code>vockey</code>) for accessing EC2 instances.</li>
+    </ul>
+
+    <h2 id="architecture-overview">Architecture Overview</h2>
+    <p>The deployed architecture consists of:</p>
+    <a href="https://ibb.co/HttzCzT"><img src="https://i.ibb.co/bssBFB5/img.jpg" alt="img"></a>
+    <ul>
+        <li><strong>VPC</strong>: A custom VPC with a CIDR block of <code>192.168.0.0/16</code>.</li>
+        <li><strong>Subnets</strong>:
+            <ul>
+                <li><strong>Public Subnets</strong>: Two subnets in different availability zones for high availability.</li>
+                <li><strong>Private Subnets</strong>: Two subnets in different availability zones for backend services.</li>
+            </ul>
+        </li>
+        <li><strong>Internet Gateway</strong>: Provides internet access to public subnets.</li>
+        <li><strong>NAT Gateway</strong>: Enables instances in private subnets to access the internet.</li>
+        <li><strong>Route Tables</strong>: Separate route tables for public and private subnets.</li>
+        <li><strong>Security Groups</strong>: Define inbound and outbound traffic rules.</li>
+        <li><strong>EC2 Instances</strong>: Bastion host for secure access and application servers.</li>
+        <li><strong>Application Load Balancer (ALB)</strong>: Distributes incoming traffic across multiple instances.</li>
+        <li><strong>Auto Scaling Group (ASG)</strong>: Automatically adjusts the number of instances based on demand.</li>
+    </ul>
+
+    <h2 id="terraform-configuration">Terraform Configuration</h2>
+    <p>The Terraform configuration is divided into several sections, each responsible for setting up different components of the infrastructure.</p>
+
+    <h3 id="vpc-configuration">VPC Configuration</h3>
+    <pre><code class="language-hcl">resource "aws_vpc" "main" {
+  cidr_block = "192.168.0.0/16"
+
+  tags = {
+    Name = "main-vpc"
+  }
+}
+</code></pre>
+    <ul>
+        <li><strong>Resource</strong>: <code>aws_vpc.main</code></li>
+        <li><strong>Description</strong>: Creates a Virtual Private Cloud (VPC) with a CIDR block of <code>192.168.0.0/16</code>.</li>
+        <li><strong>Tags</strong>: Names the VPC as <code>main-vpc</code>.</li>
+    </ul>
+
+    <h3 id="subnet-configuration">Subnet Configuration</h3>
+    <pre><code class="language-hcl">resource "aws_subnet" "subnet1" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "192.168.1.0/24"
+  availability_zone = "us-east-1a"
+
+  tags = {
+    Name = "priv_subnet-1"
+  }
+}
+
+resource "aws_subnet" "subnet2" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "192.168.2.0/24"
+  availability_zone = "us-east-1b"
+
+  tags = {
+    Name = "priv_subnet-2"
+  }
+}
+
+resource "aws_subnet" "subnet3" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "192.168.3.0/24"
+  availability_zone = "us-east-1a"
+
+  tags = {
+    Name = "pub_subnet-1"
+  }
+}
+
+resource "aws_subnet" "subnet4" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "192.168.4.0/24"
+  availability_zone = "us-east-1b"
+
+  tags = {
+    Name = "pub_subnet-2"
+  }
+}
+</code></pre>
+    <ul>
+        <li><strong>Resources</strong>: <code>aws_subnet.subnet1</code>, <code>aws_subnet.subnet2</code>, <code>aws_subnet.subnet3</code>, <code>aws_subnet.subnet4</code></li>
+        <li><strong>Description</strong>:
+            <ul>
+                <li><strong>Private Subnets</strong>:
+                    <ul>
+                        <li><code>subnet1</code>: <code>192.168.1.0/24</code> in <code>us-east-1a</code></li>
+                        <li><code>subnet2</code>: <code>192.168.2.0/24</code> in <code>us-east-1b</code></li>
+                    </ul>
+                </li>
+                <li><strong>Public Subnets</strong>:
+                    <ul>
+                        <li><code>subnet3</code>: <code>192.168.3.0/24</code> in <code>us-east-1a</code></li>
+                        <li><code>subnet4</code>: <code>192.168.4.0/24</code> in <code>us-east-1b</code></li>
+                    </ul>
+                </li>
+            </ul>
+        </li>
+        <li><strong>Tags</strong>: Each subnet is tagged appropriately for identification.</li>
+    </ul>
+
+    <h3 id="internet-gateway-and-nat-gateway">Internet Gateway and NAT Gateway</h3>
+    <pre><code class="language-hcl">resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "main-gateway"
+  }
+}
+
+resource "aws_eip" "nat_eip" {
+  tags = {
+    Name = "nat-eip"
+  }
+}
+
+resource "aws_nat_gateway" "nat_gw" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.subnet4.id
+
+  tags = {
+    Name = "nat-gateway"
+  }
+}
+</code></pre>
+    <ul>
+        <li><strong>Resources</strong>:
+            <ul>
+                <li><code>aws_internet_gateway.main</code>: Creates an Internet Gateway attached to the VPC.</li>
+                <li><code>aws_eip.nat_eip</code>: Allocates an Elastic IP for the NAT Gateway.</li>
+                <li><code>aws_nat_gateway.nat_gw</code>: Creates a NAT Gateway in <code>subnet4</code> using the allocated EIP.</li>
+            </ul>
+        </li>
+        <li><strong>Tags</strong>: Each gateway component is appropriately tagged.</li>
+    </ul>
+
+    <h3 id="route-tables">Route Tables</h3>
+    <pre><code class="language-hcl">resource "aws_route_table" "public_RT" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+
+  tags = {
+    Name = "public_RT"
+  }
+}
+
+resource "aws_route_table" "private_RT" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "private_RT"
+  }
+}
+
+resource "aws_route" "private_route" {
+  route_table_id         = aws_route_table.private_RT.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.nat_gw.id
+}
+</code></pre>
+    <ul>
+        <li><strong>Resources</strong>:
+            <ul>
+                <li><code>aws_route_table.public_RT</code>: Route table for public subnets with a default route to the Internet Gateway.</li>
+                <li><code>aws_route_table.private_RT</code>: Route table for private subnets.</li>
+                <li><code>aws_route.private_route</code>: Adds a default route to the NAT Gateway for private subnets.</li>
+            </ul>
+        </li>
+        <li><strong>Tags</strong>: Each route table is tagged for easy identification.</li>
+    </ul>
+
+    <h3 id="security-groups">Security Groups</h3>
+    <pre><code class="language-hcl">resource "aws_security_group" "HTTP_SG" {
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "HTTP-SG"
+  }
+}
+
+resource "aws_security_group" "bastion_SG" {
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "bastion-SG"
+  }
+}
+</code></pre>
+    <ul>
+        <li><strong>Resources</strong>:
+            <ul>
+                <li><code>aws_security_group.HTTP_SG</code>: Allows HTTP (port 80) and SSH (port 22) inbound traffic from anywhere. Allows all outbound traffic.</li>
+                <li><code>aws_security_group.bastion_SG</code>: Allows SSH (port 22) inbound traffic from anywhere. Allows all outbound traffic.</li>
+            </ul>
+        </li>
+        <li><strong>Tags</strong>: Each security group is tagged for identification.</li>
+    </ul>
+
+    <h3 id="ec2-instances">EC2 Instances</h3>
+    <pre><code class="language-hcl">resource "aws_instance" "bastion_host" {
+  ami                         = "ami-0fff1b9a61dec8a5f"
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.subnet3.id
+  vpc_security_group_ids      = [aws_security_group.bastion_SG.id]
+  associate_public_ip_address = true
+  key_name                    = "vockey"
+
+  tags = {
+    Name = "bastion-host"
+  }
+
+  depends_on = [aws_security_group.bastion_SG]
+}
+</code></pre>
+    <ul>
+        <li><strong>Resource</strong>: <code>aws_instance.bastion_host</code></li>
+        <li><strong>Description</strong>: Launches a bastion host in the public subnet (<code>subnet3</code>).</li>
+        <li><strong>Configuration</strong>:
+            <ul>
+                <li><strong>AMI</strong>: <code>ami-0fff1b9a61dec8a5f</code></li>
+                <li><strong>Instance Type</strong>: <code>t2.micro</code></li>
+                <li><strong>Security Group</strong>: Attached to <code>bastion_SG</code></li>
+                <li><strong>Public IP</strong>: Associated for internet access</li>
+                <li><strong>SSH Key</strong>: Uses <code>vockey</code> for SSH access</li>
+            </ul>
+        </li>
+        <li><strong>Tags</strong>: Named <code>bastion-host</code>.</li>
+        <li><strong>Dependencies</strong>: Depends on the creation of the <code>bastion_SG</code> security group.</li>
+    </ul>
+
+    <h3 id="load-balancer">Load Balancer</h3>
+    <pre><code class="language-hcl">resource "aws_lb" "test" {
+  name               = "bassam-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.HTTP_SG.id]
+  subnets            = [aws_subnet.subnet3.id, aws_subnet.subnet4.id]
+
+  enable_deletion_protection = false
+
+  tags = {
+    Name = "bassam-alb"
+  }
+}
+</code></pre>
+    <ul>
+        <li><strong>Resource</strong>: <code>aws_lb.test</code></li>
+        <li><strong>Description</strong>: Creates an Application Load Balancer (ALB) named <code>bassam-alb</code>.</li>
+        <li><strong>Configuration</strong>:
+            <ul>
+                <li><strong>Type</strong>: Application Load Balancer</li>
+                <li><strong>Security Groups</strong>: Attached to <code>HTTP_SG</code></li>
+                <li><strong>Subnets</strong>: Deployed in both public subnets (<code>subnet3</code> and <code>subnet4</code>)</li>
+                <li><strong>Deletion Protection</strong>: Disabled</li>
+            </ul>
+        </li>
+        <li><strong>Tags</strong>: Named <code>bassam-alb</code>.</li>
+    </ul>
+
+    <h3 id="auto-scaling-group">Auto Scaling Group</h3>
+    <pre><code class="language-hcl">resource "aws_launch_configuration" "app" {
+  name            = "app-launch-configuration"
+  image_id        = "ami-0fff1b9a61dec8a5f"
+  instance_type   = "t2.micro"
+  key_name        = "vockey"
+  security_groups = [aws_security_group.HTTP_SG.id]
+
+  user_data = <<-EOF
+              #!/bin/bash
+              sudo yum update -y 
+              sudo yum install httpd -y 
+              sudo systemctl start httpd
+              sudo systemctl enable httpd 
+              EOF
+}
+
+resource "aws_autoscaling_group" "app" {
+  launch_configuration = aws_launch_configuration.app.id
+  min_size             = 1
+  max_size             = 3
+  desired_capacity     = 2
+  vpc_zone_identifier  = [aws_subnet.subnet1.id, aws_subnet.subnet2.id]
+
+  target_group_arns = [aws_lb_target_group.test.arn]
+
+  tag {
+    key                 = "Name"
+    value               = "ASG_Instance"
+    propagate_at_launch = true
+  }
+
+  lifecycle {
+    ignore_changes = [desired_capacity]
+  }
+}
+</code></pre>
+    <ul>
+        <li><strong>Resources</strong>:
+            <ul>
+                <li><code>aws_launch_configuration.app</code>: Defines the launch configuration for the ASG.</li>
+                <li><code>aws_autoscaling_group.app</code>: Creates an Auto Scaling Group with specified parameters.</li>
+            </ul>
+        </li>
+        <li><strong>Configuration</strong>:
+            <ul>
+                <li><strong>Launch Configuration</strong>:
+                    <ul>
+                        <li><strong>AMI</strong>: <code>ami-0fff1b9a61dec8a5f</code></li>
+                        <li><strong>Instance Type</strong>: <code>t2.micro</code></li>
+                        <li><strong>SSH Key</strong>: <code>vockey</code></li>
+                        <li><strong>Security Groups</strong>: Attached to <code>HTTP_SG</code></li>
+                        <li><strong>User Data</strong>: Installs and starts Apache HTTP server</li>
+                    </ul>
+                </li>
+                <li><strong>Auto Scaling Group</strong>:
+                    <ul>
+                        <li><strong>Size</strong>: Minimum 1, Maximum 3, Desired 2</li>
+                        <li><strong>Subnets</strong>: Deployed in private subnets (<code>subnet1</code> and <code>subnet2</code>)</li>
+                        <li><strong>Target Group</strong>: Associated with <code>TG-bassam</code></li>
+                        <li><strong>Tags</strong>: Instances tagged as <code>ASG_Instance</code></li>
+                        <li><strong>Lifecycle</strong>: Ignores changes to <code>desired_capacity</code> to allow manual scaling</li>
+                    </ul>
+                </li>
+            </ul>
+        </li>
+    </ul>
+
+    <h2 id="deployment-steps">Deployment Steps</h2>
+    <p>Follow these steps to deploy the infrastructure:</p>
+    <ol>
+        <li><strong>Clone the Repository</strong>: If the Terraform configuration is stored in a repository, clone it to your local machine.
+            <pre><code class="language-bash">git clone &lt;repository_url&gt;
+cd &lt;repository_directory&gt;
+</code></pre>
+        </li>
+        <li><strong>Initialize Terraform</strong>: Initialize the Terraform working directory. This downloads the necessary providers and modules.
+            <pre><code class="language-bash">terraform init
+</code></pre>
+        </li>
+        <li><strong>Review the Plan</strong>: Generate and review the execution plan to understand the changes Terraform will make.
+            <pre><code class="language-bash">terraform plan
+</code></pre>
+        </li>
+        <li><strong>Apply the Configuration</strong>: Deploy the infrastructure by applying the Terraform configuration.
+            <pre><code class="language-bash">terraform apply
+</code></pre>
+            <p>Confirm the action by typing <code>yes</code> when prompted.</p>
+        </li>
+        <li><strong>Verify Deployment</strong>: After the deployment completes, verify the resources in the AWS Management Console.</li>
+        <li><strong>Accessing the Bastion Host</strong>:
+            <ul>
+                <li><strong>SSH into Bastion Host</strong>:
+                    <pre><code class="language-bash">ssh -i /path/to/vockey.pem ec2-user@&lt;bastion_host_public_ip&gt;
+</code></pre>
+                </li>
+                <li><strong>Access Private Instances</strong>: Use the bastion host to access instances in private subnets.</li>
+            </ul>
+        </li>
+    </ol>
+
+  
+
+</body>
+</html>
